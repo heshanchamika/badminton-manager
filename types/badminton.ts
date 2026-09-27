@@ -32,4 +32,16 @@ export interface PlayerMatchStats {
   restCount: number;
 }
 
+export interface BadmintonSessionData {
+  totalCost: number;
+  players: Player[];
+  numMatches?: number;
+  splitSummary?: SplitSummary | null;
+  rounds?: RoundMatch[] | null;
+  playerStats?: PlayerMatchStats[] | null;
+  updatedAt?: string;
+}
+
+export type SyncStatus = 'idle' | 'saving' | 'saved' | 'loading' | 'error';
+
 export type TabType = 'splitter' | 'rounds';
