@@ -18,7 +18,10 @@ export const MatchControls: React.FC<MatchControlsProps> = ({
   onGenerate,
 }) => {
   const suggested = getSuggestedMatchCount(playerCount);
-  const quickOptions = [3, 4, 5, 6, 8];
+  const defaultOptions = [3, 4, 5, 6, 8, 10, 12];
+  const quickOptions = Array.from(new Set([suggested, ...defaultOptions]))
+    .filter((n) => n > 0 && n <= 24)
+    .sort((a, b) => a - b);
 
   return (
     <div className="space-y-4 mb-6">
@@ -40,9 +43,20 @@ export const MatchControls: React.FC<MatchControlsProps> = ({
           >
             Matches to Generate
           </label>
-          <span className="text-xs text-slate-500 font-medium">
-            Suggested: <strong className="text-emerald-700">{suggested}</strong>
-          </span>
+          <button
+            type="button"
+            onClick={() => onNumMatchesChange(suggested)}
+            title="Click to apply recommended match count"
+            className="flex items-center gap-1.5 text-xs font-semibold px-2 py-0.5 rounded-md bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 transition-colors cursor-pointer"
+          >
+            <span>Recommended:</span>
+            <strong className="text-emerald-900">{suggested}</strong>
+            {numMatches === suggested && (
+              <span className="text-[10px] bg-emerald-200 text-emerald-900 px-1 py-0.2 rounded font-bold">
+                Auto
+              </span>
+            )}
+          </button>
         </div>
 
         <div className="flex items-center gap-3">
@@ -69,6 +83,15 @@ export const MatchControls: React.FC<MatchControlsProps> = ({
                 }`}
               >
                 {opt}
+                {opt === suggested && (
+                  <span
+                    className={`ml-1 text-[10px] ${
+                      numMatches === opt ? "text-emerald-100" : "text-emerald-600 font-bold"
+                    }`}
+                  >
+                    ★
+                  </span>
+                )}
               </button>
             ))}
           </div>

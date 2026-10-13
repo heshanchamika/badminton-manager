@@ -8,7 +8,7 @@ interface CourtCostInputProps {
   onChange: (value: number) => void;
 }
 
-const PRESET_AMOUNTS = [1500, 2000, 2500, 3000, 4000];
+const PRESET_AMOUNTS = [1000, 1500, 2000, 2500, 3000, 4000];
 
 export const CourtCostInput: React.FC<CourtCostInputProps> = ({ totalCost, onChange }) => {
   return (
@@ -21,7 +21,12 @@ export const CourtCostInput: React.FC<CourtCostInputProps> = ({ totalCost, onCha
           <Banknote className="w-4 h-4 text-emerald-600" />
           Total Court Cost
         </label>
-        <span className="text-xs font-semibold text-slate-400">Currency: LKR</span>
+        <div className="flex items-center gap-1.5">
+          <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200/60">
+            {totalCost ? `${(totalCost / 1000).toFixed(1)} hrs court time` : "0 hrs"}
+          </span>
+          <span className="text-xs font-semibold text-slate-400">LKR</span>
+        </div>
       </div>
 
       <div className="relative">
@@ -53,7 +58,7 @@ export const CourtCostInput: React.FC<CourtCostInputProps> = ({ totalCost, onCha
                 : "bg-white text-slate-600 border-slate-200 hover:bg-slate-100"
             }`}
           >
-            {preset.toLocaleString()}
+            {preset.toLocaleString()} ({preset / 1000}h)
           </button>
         ))}
       </div>

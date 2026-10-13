@@ -35,7 +35,9 @@ export function useBadmintonManager() {
   const [activeTab, setActiveTab] = useState<TabType>("splitter");
   const [totalCost, setTotalCost] = useState<number>(2000);
   const [players, setPlayers] = useState<Player[]>(INITIAL_PLAYERS);
-  const [customMatches, setCustomMatches] = useState<number | null>(null);
+  const [numMatches, setNumMatches] = useState<number>(() =>
+    getSuggestedMatchCount(INITIAL_PLAYERS.length)
+  );
 
   const [splitSummary, setSplitSummary] = useState<SplitSummary | null>(null);
   const [rounds, setRounds] = useState<RoundMatch[] | null>(null);
@@ -48,9 +50,16 @@ export function useBadmintonManager() {
 
   // Snapshot of last saved state to allow discarding unsaved edits
   const lastSavedSnapshotRef = useRef<BadmintonSessionData | null>(null);
+  const prevPlayerCountRef = useRef<number>(INITIAL_PLAYERS.length);
 
-  // Compute effective match count
-  const effectiveNumMatches = customMatches ?? getSuggestedMatchCount(players.length);
+  // Automatically update matches to recommended whenever player count changes
+  useEffect(() => {
+    if (prevPlayerCountRef.current !== players.length) {
+      prevPlayerCountRef.current = players.length;
+      const recommended = getSuggestedMatchCount(players.length);
+      setNumMatches(recommended);
+    }
+  }, [players.length]);
 
   // Determine whether current state has actually changed from saved session
   const hasUnsavedChanges = useMemo(() => {
@@ -62,10 +71,10 @@ export function useBadmintonManager() {
     }
 
     // 2. Custom matches check
-    const currentMatches = customMatches ?? getSuggestedMatchCount(players.length);
     const baselineMatches =
       baseline.numMatches ?? getSuggestedMatchCount(baseline.players?.length || 5);
-    if (customMatches !== null && currentMatches !== baselineMatches) {
+    const recommendedMatches = getSuggestedMatchCount(players.length);
+    if (numMatches !== baselineMatches && numMatches !== recommendedMatches) {
       return true;
     }
 
@@ -104,7 +113,7 @@ export function useBadmintonManager() {
     }
 
     return false;
-  }, [totalCost, players, customMatches, rounds, savedSession]);
+  }, [totalCost, players, numMatches, rounds, savedSession]);
 
   // Show transient feedback notifications
   const notify = useCallback((message: string) => {
@@ -133,12 +142,12 @@ export function useBadmintonManager() {
 
         if (Array.isArray(data.players) && data.players.length > 0) {
           setPlayers(data.players);
+          prevPlayerCountRef.current = data.players.length;
+          const recommended = getSuggestedMatchCount(data.players.length);
+          setNumMatches(typeof data.numMatches === "number" ? data.numMatches : recommended);
         }
         if (typeof data.totalCost === "number" && data.totalCost > 0) {
           setTotalCost(data.totalCost);
-        }
-        if (typeof data.numMatches === "number") {
-          setCustomMatches(data.numMatches);
         }
         if (data.splitSummary) {
           setSplitSummary(data.splitSummary);
@@ -198,7 +207,7 @@ export function useBadmintonManager() {
     const payload: BadmintonSessionData = {
       totalCost,
       players,
-      numMatches: effectiveNumMatches,
+      numMatches,
       splitSummary,
       rounds,
       playerStats,
@@ -222,14 +231,16 @@ export function useBadmintonManager() {
         notify("Saved locally (cloud offline)");
       }
     }
-  }, [totalCost, players, effectiveNumMatches, splitSummary, rounds, playerStats, notify]);
+  }, [totalCost, players, numMatches, splitSummary, rounds, playerStats, notify]);
 
   // Discard unsaved changes and revert to last saved state
   const discardChanges = useCallback(() => {
     const snapshot = savedSession || lastSavedSnapshotRef.current || INITIAL_SESSION;
-    setPlayers(snapshot.players || INITIAL_PLAYERS);
+    const restoredPlayers = snapshot.players || INITIAL_PLAYERS;
+    setPlayers(restoredPlayers);
+    prevPlayerCountRef.current = restoredPlayers.length;
     setTotalCost(snapshot.totalCost || 2000);
-    setCustomMatches(snapshot.numMatches ?? null);
+    setNumMatches(snapshot.numMatches ?? getSuggestedMatchCount(restoredPlayers.length));
     setSplitSummary(snapshot.splitSummary || null);
     setRounds(snapshot.rounds || null);
     setPlayerStats(snapshot.playerStats || null);
@@ -237,16 +248,51 @@ export function useBadmintonManager() {
     notify("Reverted to last saved session");
   }, [savedSession, notify]);
 
-  const addPlayer = (name = "", hours = 2) => {
+  // Updates Total Court Cost (where 1,000 LKR = 1 hour) and adjusts each player's play time
+  const handleCostChange = useCallback((newCost: number) => {
+    setTotalCost(newCost);
+
+    // When newCost is valid (>= 500 LKR, i.e. >= 0.5 hr), update player hours to match court duration
+    if (newCost >= 500) {
+      const newCourtHours = Math.max(0.5, Math.round((newCost / 1000) * 2) / 2);
+
+      setPlayers((prevPlayers) => {
+        const updatedPlayers = prevPlayers.map((player) => ({
+          ...player,
+          hours: newCourtHours,
+        }));
+
+        // If split is already calculated, keep the results updated
+        setSplitSummary((currSummary) => {
+          if (!currSummary) return null;
+          return calculateCostSplit(updatedPlayers, newCost);
+        });
+
+        return updatedPlayers;
+      });
+    }
+  }, []);
+
+  const addPlayer = (name = "", hours?: number) => {
+    const currentCourtHours = Math.max(0.5, Math.round(((totalCost || 2000) / 1000) * 2) / 2);
+    const playerHours = typeof hours === "number" && hours > 0 ? hours : currentCourtHours;
     const newId = Date.now().toString() + Math.random().toString(36).substring(2, 5);
     const newPlayerName = name.trim() || `Player ${players.length + 1}`;
-    setPlayers((prev) => [...prev, { id: newId, name: newPlayerName, hours }]);
+    setPlayers((prev) => {
+      const updated = [...prev, { id: newId, name: newPlayerName, hours: playerHours }];
+      setSplitSummary((curr) => (curr ? calculateCostSplit(updated, totalCost) : null));
+      return updated;
+    });
   };
 
   const updatePlayer = (id: string, updates: Partial<Player>) => {
-    setPlayers((prev) =>
-      prev.map((player) => (player.id === id ? { ...player, ...updates } : player))
-    );
+    setPlayers((prev) => {
+      const updated = prev.map((player) =>
+        player.id === id ? { ...player, ...updates } : player
+      );
+      setSplitSummary((curr) => (curr ? calculateCostSplit(updated, totalCost) : null));
+      return updated;
+    });
   };
 
   const removePlayer = (id: string) => {
@@ -254,16 +300,21 @@ export function useBadmintonManager() {
       notify("You need at least one player.");
       return;
     }
-    setPlayers((prev) => prev.filter((p) => p.id !== id));
+    setPlayers((prev) => {
+      const updated = prev.filter((p) => p.id !== id);
+      setSplitSummary((curr) => (curr ? calculateCostSplit(updated, totalCost) : null));
+      return updated;
+    });
   };
 
   const resetToDefault = () => {
     setPlayers(INITIAL_PLAYERS);
+    prevPlayerCountRef.current = INITIAL_PLAYERS.length;
     setTotalCost(2000);
     setSplitSummary(null);
     setRounds(null);
     setPlayerStats(null);
-    setCustomMatches(null);
+    setNumMatches(getSuggestedMatchCount(INITIAL_PLAYERS.length));
     notify("Reset fields");
   };
 
@@ -290,14 +341,14 @@ export function useBadmintonManager() {
       return;
     }
 
-    if (effectiveNumMatches < 1) {
+    if (numMatches < 1) {
       notify("Please enter at least 1 match.");
       return;
     }
 
     const { rounds: generatedRounds, stats } = generateFairRounds(
       validPlayers,
-      effectiveNumMatches
+      numMatches
     );
     setRounds(generatedRounds);
     setPlayerStats(stats);
@@ -329,16 +380,14 @@ export function useBadmintonManager() {
     activeTab,
     setActiveTab,
     totalCost,
-    setTotalCost: (cost: number) => {
-      setTotalCost(cost);
-    },
+    setTotalCost: handleCostChange,
     players,
     addPlayer,
     updatePlayer,
     removePlayer,
-    numMatches: effectiveNumMatches,
+    numMatches,
     setNumMatches: (val: number) => {
-      setCustomMatches(val);
+      setNumMatches(val);
     },
     splitSummary,
     rounds,
