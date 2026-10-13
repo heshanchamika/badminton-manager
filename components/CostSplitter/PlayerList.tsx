@@ -35,7 +35,7 @@ export const PlayerList: React.FC<PlayerListProps> = ({
 
         <button
           type="button"
-          onClick={() => onAddPlayer("", 2)}
+          onClick={() => onAddPlayer()}
           className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg text-xs font-bold transition-all border border-blue-200/60 shadow-xs cursor-pointer"
         >
           <UserPlus className="w-3.5 h-3.5" />
@@ -43,7 +43,7 @@ export const PlayerList: React.FC<PlayerListProps> = ({
         </button>
       </div>
 
-      <div className="space-y-2 max-h-[360px] overflow-y-auto pr-1">
+      <div className="space-y-2">
         {players.map((player, index) => (
           <PlayerRow
             key={player.id}
