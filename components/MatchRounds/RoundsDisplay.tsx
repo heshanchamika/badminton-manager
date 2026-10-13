@@ -1,9 +1,9 @@
 "use client";
 
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { RoundMatch, PlayerMatchStats } from "@/types/badminton";
 import { FairnessStats } from "./FairnessStats";
-import { Share2, Check, Download, Loader2 } from "lucide-react";
+import { Share2, Check, Download, Loader2, LayoutList, Table2 } from "lucide-react";
 import { toBlob, toPng } from "html-to-image";
 
 interface RoundsDisplayProps {
@@ -20,6 +20,23 @@ export const RoundsDisplay: React.FC<RoundsDisplayProps> = ({
   const [copied, setCopied] = useState(false);
   const [isSharing, setIsSharing] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
+
+  // Check if multiple courts are present in rounds
+  const hasMultipleCourts = rounds.some((r) => r.courtGames && r.courtGames.length > 1);
+  const maxCourts = Math.max(1, ...rounds.map((r) => r.courtGames?.length || 1));
+  const isMultiCourt = stats.length > 7 && maxCourts > 1;
+
+  // Primary categorization: by Courts if > 7 players, else by Rounds
+  const [categorizeBy, setCategorizeBy] = useState<"courts" | "rounds">(() =>
+    isMultiCourt ? "courts" : "rounds"
+  );
+  const [selectedCourtTab, setSelectedCourtTab] = useState<"all" | number>("all");
+  const [viewMode, setViewMode] = useState<"cards" | "table">("cards");
+
+  // Keep categorization default updated when session changes between single and multi-court
+  useEffect(() => {
+    setCategorizeBy(stats.length > 7 && maxCourts > 1 ? "courts" : "rounds");
+  }, [stats.length, maxCourts]);
 
   // Hidden off-screen ref specifically formatted for high-res social image exports
   const exportCardRef = useRef<HTMLDivElement>(null);
@@ -116,84 +133,329 @@ export const RoundsDisplay: React.FC<RoundsDisplayProps> = ({
   return (
     <div className="mt-6">
       {/* Section Header */}
-      <div className="flex items-center justify-between pb-3 border-b border-slate-200 mb-4">
+      <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-slate-200 mb-4">
         <div>
-          <h3 className="text-sm font-bold text-slate-900">Suggested Rounds</h3>
+          <h3 className="text-sm font-bold text-slate-900">
+            {categorizeBy === "courts" ? "Court Schedules" : "Suggested Rounds"}
+          </h3>
           <p className="text-xs text-slate-500 font-medium">
             {rounds.length} {rounds.length === 1 ? "Round" : "Rounds"} scheduled
+            {hasMultipleCourts && ` • ${maxCourts} Courts`}
           </p>
         </div>
 
-        <button
-          type="button"
-          onClick={handleCopyText}
-          title="Copy text breakdown"
-          className="flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold rounded-lg border border-slate-200 shadow-xs transition-all cursor-pointer"
-        >
-          {copied ? (
-            <>
-              <Check className="w-3.5 h-3.5 text-emerald-600" />
-              <span className="text-emerald-700 font-bold">Copied!</span>
-            </>
-          ) : (
-            <>
-              <Share2 className="w-3.5 h-3.5 text-emerald-600" />
-              <span>Copy Text</span>
-            </>
+        <div className="flex items-center gap-2">
+          {/* Categorization Switcher (Courts vs Rounds) if multi-court */}
+          {hasMultipleCourts && (
+            <div className="flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200/80">
+              <button
+                type="button"
+                onClick={() => setCategorizeBy("courts")}
+                className={`flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded-md transition-all cursor-pointer ${
+                  categorizeBy === "courts"
+                    ? "bg-white text-emerald-800 shadow-2xs font-bold"
+                    : "text-slate-500 hover:text-slate-900"
+                }`}
+                title="Categorize by Courts"
+              >
+                <span>🏟️ Courts</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setCategorizeBy("rounds")}
+                className={`flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded-md transition-all cursor-pointer ${
+                  categorizeBy === "rounds"
+                    ? "bg-white text-slate-900 shadow-2xs font-bold"
+                    : "text-slate-500 hover:text-slate-900"
+                }`}
+                title="Categorize by Rounds"
+              >
+                <span>🔄 Rounds</span>
+              </button>
+            </div>
           )}
-        </button>
+
+          {/* Copy Text Button */}
+          <button
+            type="button"
+            onClick={handleCopyText}
+            title="Copy text breakdown"
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold rounded-lg border border-slate-200 shadow-xs transition-all cursor-pointer"
+          >
+            {copied ? (
+              <>
+                <Check className="w-3.5 h-3.5 text-emerald-600" />
+                <span className="text-emerald-700 font-bold">Copied!</span>
+              </>
+            ) : (
+              <>
+                <Share2 className="w-3.5 h-3.5 text-emerald-600" />
+                <span>Copy Text</span>
+              </>
+            )}
+          </button>
+        </div>
       </div>
 
       {/* Fairness stats */}
       {stats.length > 0 && <FairnessStats stats={stats} />}
 
-      {/* Rounds Table View */}
-      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xs mb-4">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs sm:text-sm whitespace-nowrap">
-            <thead className="bg-slate-100/90 border-b border-slate-200 text-[11px] sm:text-xs uppercase tracking-wider text-slate-600 font-semibold">
-              <tr>
-                <th className="py-2.5 px-3 text-center w-12 text-slate-700">Rnd</th>
-                <th className="py-2.5 px-3 text-blue-700">Team 1</th>
-                <th className="py-2.5 px-3 text-rose-700">Team 2</th>
-                <th className="py-2.5 px-3 text-slate-500">Resting</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {rounds.map((round) => (
-                <tr key={round.roundNumber} className="hover:bg-slate-50/80 transition-colors">
-                  <td className="py-2.5 px-3 text-center">
-                    <span className="inline-flex items-center justify-center w-6 h-6 rounded-md bg-slate-900 text-white font-black text-xs">
-                      {round.roundNumber}
-                    </span>
-                  </td>
-                  <td className="py-2.5 px-3 font-semibold text-blue-900 capitalize">
-                    <span className="inline-block bg-blue-50/90 text-blue-800 border border-blue-200/60 px-2.5 py-1 rounded-lg">
-                      {round.team1[0]} &amp; {round.team1[1]}
-                    </span>
-                  </td>
-                  <td className="py-2.5 px-3 font-semibold text-rose-900 capitalize">
-                    <span className="inline-block bg-rose-50/90 text-rose-800 border border-rose-200/60 px-2.5 py-1 rounded-lg">
-                      {round.team2[0]} &amp; {round.team2[1]}
-                    </span>
-                  </td>
-                  <td className="py-2.5 px-3 text-xs capitalize">
-                    {round.resting.length > 0 ? (
-                      <span className="inline-flex items-center text-amber-700 bg-amber-50 border border-amber-200/60 px-2 py-0.5 rounded-md font-medium">
-                        {round.resting.join(", ")}
-                      </span>
-                    ) : (
-                      <span className="text-slate-400 font-normal">None</span>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      {/* ========================================================== */}
+      {/* OPTION A: CATEGORIZED BY COURTS (> 7 players / multi-court) */}
+      {/* ========================================================== */}
+      {categorizeBy === "courts" && hasMultipleCourts ? (
+        <div className="space-y-4 mb-4">
+          {/* Court Filter Pills */}
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
+            <button
+              type="button"
+              onClick={() => setSelectedCourtTab("all")}
+              className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                selectedCourtTab === "all"
+                  ? "bg-emerald-700 text-white shadow-2xs"
+                  : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+              }`}
+            >
+              All Courts ({maxCourts})
+            </button>
+            {Array.from({ length: maxCourts }).map((_, c) => (
+              <button
+                key={c}
+                type="button"
+                onClick={() => setSelectedCourtTab(c + 1)}
+                className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  selectedCourtTab === c + 1
+                    ? "bg-emerald-700 text-white shadow-2xs"
+                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                }`}
+              >
+                Court {c + 1}
+              </button>
+            ))}
+          </div>
 
-      {/* Prominent Share & Download Buttons below table */}
+          {/* Individual Court Cards */}
+          {Array.from({ length: maxCourts }).map((_, c) => {
+            const courtNum = c + 1;
+            if (selectedCourtTab !== "all" && selectedCourtTab !== courtNum) return null;
+
+            return (
+              <div
+                key={courtNum}
+                className="rounded-xl border border-slate-200 bg-white shadow-xs overflow-hidden transition-all hover:border-slate-300"
+              >
+                {/* Court Banner */}
+                <div className="flex items-center justify-between px-3.5 py-2.5 bg-gradient-to-r from-emerald-800 to-teal-800 text-white shadow-2xs">
+                  <div className="flex items-center gap-2">
+                    <span className="text-base">🏟️</span>
+                    <h4 className="font-extrabold text-xs sm:text-sm tracking-wide uppercase">
+                      Court {courtNum} Schedule
+                    </h4>
+                  </div>
+                  <span className="text-[11px] bg-emerald-950/40 text-emerald-100 px-2.5 py-0.5 rounded-full font-bold border border-emerald-600/50">
+                    {rounds.length} Matches
+                  </span>
+                </div>
+
+                {/* Match List for this Court */}
+                <div className="p-2.5 sm:p-3 space-y-2">
+                  {rounds.map((round) => {
+                    const game =
+                      round.courtGames && round.courtGames[c]
+                        ? round.courtGames[c]
+                        : c === 0
+                        ? {
+                            courtNumber: 1,
+                            courtName: "Court 1",
+                            team1: round.team1,
+                            team2: round.team2,
+                          }
+                        : null;
+
+                    if (!game) return null;
+
+                    return (
+                      <div
+                        key={round.roundNumber}
+                        className="flex items-center justify-between gap-2 p-2 rounded-lg bg-slate-50/70 border border-slate-200/60 hover:bg-slate-50 transition-colors"
+                      >
+                        {/* Round Badge */}
+                        <div className="shrink-0 flex items-center justify-center w-12 py-1 rounded-md bg-slate-900 text-white font-black text-xs">
+                          RND {round.roundNumber}
+                        </div>
+
+                        {/* Matchup */}
+                        <div className="flex-1 flex items-center justify-between gap-1.5 sm:gap-2 min-w-0">
+                          {/* Team 1 */}
+                          <div className="flex-1 flex items-center justify-center text-center px-2 py-1.5 rounded-lg bg-blue-50 border border-blue-200/80 text-blue-900 font-bold text-xs sm:text-sm capitalize shadow-2xs leading-snug">
+                            <span>
+                              {game.team1[0]} &amp; {game.team1[1]}
+                            </span>
+                          </div>
+
+                          {/* VS */}
+                          <span className="shrink-0 px-1.5 py-0.5 rounded text-[10px] font-black uppercase tracking-wider text-slate-400 bg-white border border-slate-200 shadow-2xs">
+                            VS
+                          </span>
+
+                          {/* Team 2 */}
+                          <div className="flex-1 flex items-center justify-center text-center px-2 py-1.5 rounded-lg bg-rose-50 border border-rose-200/80 text-rose-900 font-bold text-xs sm:text-sm capitalize shadow-2xs leading-snug">
+                            <span>
+                              {game.team2[0]} &amp; {game.team2[1]}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+
+          {/* Resting Players by Round Schedule */}
+          {selectedCourtTab === "all" && (
+            <>
+              {rounds.some((r) => r.resting.length > 0) ? (
+                <div className="rounded-xl border border-amber-200 bg-amber-50/40 shadow-xs overflow-hidden">
+                  <div className="flex items-center justify-between px-3.5 py-2.5 bg-amber-100/70 border-b border-amber-200 text-amber-900 font-bold text-xs">
+                    <div className="flex items-center gap-1.5">
+                      <span>💤</span>
+                      <span>Resting Rotation by Round</span>
+                    </div>
+                    <span className="text-[11px] text-amber-700 font-medium">
+                      Sit out &amp; recharge
+                    </span>
+                  </div>
+
+                  <div className="p-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {rounds.map((round) => (
+                      <div
+                        key={round.roundNumber}
+                        className="flex items-center gap-2 p-2 rounded-lg bg-white border border-amber-200/80 text-xs shadow-2xs"
+                      >
+                        <span className="px-2 py-0.5 rounded bg-slate-900 text-white font-black text-[11px] shrink-0">
+                          RND {round.roundNumber}
+                        </span>
+                        {round.resting.length > 0 ? (
+                          <span className="font-semibold text-amber-900 capitalize truncate">
+                            {round.resting.join(", ")}
+                          </span>
+                        ) : (
+                          <span className="text-emerald-700 font-medium text-xs">
+                            ✨ All Playing
+                          </span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold flex items-center justify-center gap-1.5 shadow-xs">
+                  <span>✨</span>
+                  <span>All {stats.length} players active every round (no resting needed).</span>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      ) : (
+        /* ========================================================== */
+        /* OPTION B: CATEGORIZED BY ROUNDS (<= 7 players or toggled)  */
+        /* ========================================================== */
+        <div className="space-y-3 mb-4">
+          {rounds.map((round) => {
+            const games =
+              round.courtGames && round.courtGames.length > 0
+                ? round.courtGames
+                : [
+                    {
+                      courtNumber: 1,
+                      courtName: "Court 1",
+                      team1: round.team1,
+                      team2: round.team2,
+                    },
+                  ];
+
+            return (
+              <div
+                key={round.roundNumber}
+                className="rounded-xl border border-slate-200 bg-white shadow-xs overflow-hidden transition-all hover:border-slate-300"
+              >
+                {/* Round Header Bar */}
+                <div className="flex items-center justify-between px-3.5 py-2.5 bg-slate-50 border-b border-slate-200">
+                  <div className="flex items-center gap-2">
+                    <span className="inline-flex items-center justify-center px-2.5 py-0.5 rounded-md bg-slate-900 text-white font-black text-xs tracking-wide">
+                      ROUND {round.roundNumber}
+                    </span>
+                    {hasMultipleCourts && (
+                      <span className="text-[11px] font-semibold text-slate-500">
+                        {games.length} Courts
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Resting status right on top */}
+                  {round.resting.length > 0 ? (
+                    <div className="flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-50 border border-amber-200/90 text-amber-800 text-[11px] font-semibold">
+                      <span>💤</span>
+                      <span className="text-amber-700 font-bold">Resting:</span>
+                      <span className="capitalize">{round.resting.join(", ")}</span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-[11px] font-semibold">
+                      <span>✨ All Playing</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Matchups Container */}
+                <div className="p-2.5 sm:p-3 space-y-2">
+                  {games.map((game, gIdx) => (
+                    <div
+                      key={`${round.roundNumber}-game-${game.courtNumber || gIdx}`}
+                      className="p-2 sm:p-2.5 rounded-lg bg-slate-50/70 border border-slate-200/60 space-y-1.5"
+                    >
+                      {/* Court Indicator (if multiple courts) */}
+                      {hasMultipleCourts && (
+                        <div className="flex items-center justify-between">
+                          <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider bg-emerald-700 text-white shadow-2xs">
+                            {game.courtName || `Court ${game.courtNumber}`}
+                          </span>
+                        </div>
+                      )}
+
+                      {/* Matchup: Team 1 VS Team 2 */}
+                      <div className="flex items-center justify-between gap-1.5 sm:gap-2">
+                        {/* Team 1 */}
+                        <div className="flex-1 flex items-center justify-center text-center px-2.5 py-1.5 rounded-lg bg-blue-50 border border-blue-200/80 text-blue-900 font-bold text-xs sm:text-sm capitalize shadow-2xs leading-snug">
+                          <span>
+                            {game.team1[0]} &amp; {game.team1[1]}
+                          </span>
+                        </div>
+
+                        {/* VS Badge */}
+                        <span className="shrink-0 px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider text-slate-400 bg-white border border-slate-200 shadow-2xs">
+                          VS
+                        </span>
+
+                        {/* Team 2 */}
+                        <div className="flex-1 flex items-center justify-center text-center px-2.5 py-1.5 rounded-lg bg-rose-50 border border-rose-200/80 text-rose-900 font-bold text-xs sm:text-sm capitalize shadow-2xs leading-snug">
+                          <span>
+                            {game.team2[0]} &amp; {game.team2[1]}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Prominent Share & Download Buttons */}
       <div className="flex flex-col sm:flex-row gap-2 mt-4">
         <button
           type="button"
@@ -242,7 +504,7 @@ export const RoundsDisplay: React.FC<RoundsDisplayProps> = ({
           position: "fixed",
           left: "-9999px",
           top: "0px",
-          width: "560px",
+          width: "600px",
           zIndex: -999,
           pointerEvents: "none",
         }}
@@ -250,7 +512,7 @@ export const RoundsDisplay: React.FC<RoundsDisplayProps> = ({
         <div
           ref={exportCardRef}
           style={{
-            width: "560px",
+            width: "600px",
             backgroundColor: "#ffffff",
             padding: "24px",
             borderRadius: "16px",
@@ -302,150 +564,365 @@ export const RoundsDisplay: React.FC<RoundsDisplayProps> = ({
                 backgroundColor: "#ecfdf5",
                 color: "#047857",
                 border: "1px solid #a7f3d0",
-                padding: "4px 10px",
+                padding: "5px 12px",
                 borderRadius: "20px",
                 fontSize: "12px",
                 fontWeight: 700,
               }}
             >
-              {rounds.length} Matches • {stats.length} Players
+              {rounds.length} Matches • {stats.length} Players{hasMultipleCourts ? ` • ${maxCourts} Courts` : ""}
             </div>
           </div>
 
-          {/* Table */}
-          <table
-            style={{
-              width: "100%",
-              borderCollapse: "collapse",
-              textAlign: "left",
-              marginBottom: "18px",
-            }}
-          >
-            <thead>
-              <tr style={{ backgroundColor: "#f8fafc", borderBottom: "1px solid #cbd5e1" }}>
-                <th
-                  style={{
-                    padding: "8px 10px",
-                    fontSize: "11px",
-                    fontWeight: 700,
-                    color: "#475569",
-                    textAlign: "center",
-                    width: "48px",
-                  }}
-                >
-                  RND
-                </th>
-                <th
-                  style={{
-                    padding: "8px 10px",
-                    fontSize: "11px",
-                    fontWeight: 700,
-                    color: "#1d4ed8",
-                  }}
-                >
-                  TEAM 1
-                </th>
-                <th
-                  style={{
-                    padding: "8px 10px",
-                    fontSize: "11px",
-                    fontWeight: 700,
-                    color: "#be123c",
-                  }}
-                >
-                  TEAM 2
-                </th>
-                <th
-                  style={{
-                    padding: "8px 10px",
-                    fontSize: "11px",
-                    fontWeight: 700,
-                    color: "#b45309",
-                  }}
-                >
-                  RESTING
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {rounds.map((round, idx) => (
-                <tr
-                  key={round.roundNumber}
-                  style={{
-                    borderBottom: "1px solid #f1f5f9",
-                    backgroundColor: idx % 2 === 0 ? "#ffffff" : "#fcfcfd",
-                  }}
-                >
-                  <td style={{ padding: "10px", textAlign: "center" }}>
-                    <span
+          {/* If multi-court, export categorized by COURTS */}
+          {categorizeBy === "courts" && hasMultipleCourts ? (
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                gap: "12px",
+                marginBottom: "16px",
+              }}
+            >
+              {Array.from({ length: maxCourts }).map((_, c) => {
+                const courtNum = c + 1;
+                return (
+                  <div
+                    key={courtNum}
+                    style={{
+                      backgroundColor: "#ffffff",
+                      border: "1px solid #e2e8f0",
+                      borderRadius: "10px",
+                      overflow: "hidden",
+                    }}
+                  >
+                    {/* Court Banner */}
+                    <div
                       style={{
-                        backgroundColor: "#0f172a",
+                        backgroundColor: "#065f46",
                         color: "#ffffff",
-                        padding: "2px 8px",
-                        borderRadius: "6px",
-                        fontSize: "11px",
-                        fontWeight: 800,
+                        padding: "8px 12px",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
                       }}
                     >
-                      {round.roundNumber}
-                    </span>
-                  </td>
-                  <td style={{ padding: "10px" }}>
-                    <span
-                      style={{
-                        backgroundColor: "#eff6ff",
-                        color: "#1e40af",
-                        border: "1px solid #bfdbfe",
-                        padding: "4px 8px",
-                        borderRadius: "6px",
-                        fontSize: "12px",
-                        fontWeight: 700,
-                        textTransform: "capitalize",
-                      }}
-                    >
-                      {round.team1[0]} &amp; {round.team1[1]}
-                    </span>
-                  </td>
-                  <td style={{ padding: "10px" }}>
-                    <span
-                      style={{
-                        backgroundColor: "#fff1f2",
-                        color: "#9f1239",
-                        border: "1px solid #fecdd3",
-                        padding: "4px 8px",
-                        borderRadius: "6px",
-                        fontSize: "12px",
-                        fontWeight: 700,
-                        textTransform: "capitalize",
-                      }}
-                    >
-                      {round.team2[0]} &amp; {round.team2[1]}
-                    </span>
-                  </td>
-                  <td style={{ padding: "10px" }}>
-                    {round.resting.length > 0 ? (
+                      <span style={{ fontSize: "12px", fontWeight: 800, letterSpacing: "0.03em" }}>
+                        🏟️ COURT {courtNum} SCHEDULE
+                      </span>
+                      <span style={{ fontSize: "11px", fontWeight: 600, color: "#a7f3d0" }}>
+                        {rounds.length} Matches
+                      </span>
+                    </div>
+
+                    {/* Court Matches */}
+                    <div style={{ padding: "8px", display: "flex", flexDirection: "column", gap: "6px" }}>
+                      {rounds.map((round) => {
+                        const game =
+                          round.courtGames && round.courtGames[c]
+                            ? round.courtGames[c]
+                            : c === 0
+                            ? {
+                                courtNumber: 1,
+                                courtName: "Court 1",
+                                team1: round.team1,
+                                team2: round.team2,
+                              }
+                            : null;
+
+                        if (!game) return null;
+
+                        return (
+                          <div
+                            key={round.roundNumber}
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "8px",
+                              backgroundColor: "#f8fafc",
+                              border: "1px solid #f1f5f9",
+                              borderRadius: "8px",
+                              padding: "5px 8px",
+                            }}
+                          >
+                            <span
+                              style={{
+                                backgroundColor: "#0f172a",
+                                color: "#ffffff",
+                                padding: "2px 8px",
+                                borderRadius: "5px",
+                                fontSize: "11px",
+                                fontWeight: 800,
+                              }}
+                            >
+                              RND {round.roundNumber}
+                            </span>
+
+                            {/* Team 1 */}
+                            <div
+                              style={{
+                                flex: 1,
+                                backgroundColor: "#eff6ff",
+                                color: "#1e40af",
+                                border: "1px solid #bfdbfe",
+                                padding: "5px 8px",
+                                borderRadius: "6px",
+                                fontSize: "12px",
+                                fontWeight: 700,
+                                textAlign: "center",
+                                textTransform: "capitalize",
+                              }}
+                            >
+                              {game.team1[0]} &amp; {game.team1[1]}
+                            </div>
+
+                            {/* VS */}
+                            <span
+                              style={{
+                                fontSize: "10px",
+                                fontWeight: 900,
+                                color: "#94a3b8",
+                                padding: "2px 6px",
+                                backgroundColor: "#ffffff",
+                                border: "1px solid #cbd5e1",
+                                borderRadius: "4px",
+                              }}
+                            >
+                              VS
+                            </span>
+
+                            {/* Team 2 */}
+                            <div
+                              style={{
+                                flex: 1,
+                                backgroundColor: "#fff1f2",
+                                color: "#9f1239",
+                                border: "1px solid #fecdd3",
+                                padding: "5px 8px",
+                                borderRadius: "6px",
+                                fontSize: "12px",
+                                fontWeight: 700,
+                                textAlign: "center",
+                                textTransform: "capitalize",
+                              }}
+                            >
+                              {game.team2[0]} &amp; {game.team2[1]}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+
+              {/* Resting Players Schedule in export card */}
+              {rounds.some((r) => r.resting.length > 0) && (
+                <div
+                  style={{
+                    backgroundColor: "#fefce8",
+                    border: "1px solid #fef08a",
+                    borderRadius: "10px",
+                    padding: "8px 12px",
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: "11px",
+                      fontWeight: 700,
+                      color: "#854d0e",
+                      marginBottom: "6px",
+                    }}
+                  >
+                    💤 RESTING ROTATION BY ROUND
+                  </div>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
+                    {rounds.map((round) => (
                       <span
+                        key={round.roundNumber}
                         style={{
-                          backgroundColor: "#fef3c7",
-                          color: "#92400e",
-                          border: "1px solid #fde68a",
-                          padding: "3px 8px",
-                          borderRadius: "6px",
+                          backgroundColor: "#ffffff",
+                          border: "1px solid #fde047",
+                          padding: "2px 8px",
+                          borderRadius: "5px",
                           fontSize: "11px",
-                          fontWeight: 600,
-                          textTransform: "capitalize",
+                          color: "#713f12",
                         }}
                       >
-                        {round.resting.join(", ")}
+                        <strong>RND {round.roundNumber}:</strong>{" "}
+                        <span style={{ textTransform: "capitalize" }}>
+                          {round.resting.length > 0 ? round.resting.join(", ") : "None"}
+                        </span>
                       </span>
-                    ) : (
-                      <span style={{ color: "#94a3b8", fontSize: "11px" }}>None</span>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (
+            /* Single Court (or Round View) */
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                gap: "10px",
+                marginBottom: "16px",
+              }}
+            >
+              {rounds.map((round) => {
+                const games =
+                  round.courtGames && round.courtGames.length > 0
+                    ? round.courtGames
+                    : [
+                        {
+                          courtNumber: 1,
+                          courtName: "Court 1",
+                          team1: round.team1,
+                          team2: round.team2,
+                        },
+                      ];
+
+                return (
+                  <div
+                    key={round.roundNumber}
+                    style={{
+                      backgroundColor: "#f8fafc",
+                      border: "1px solid #e2e8f0",
+                      borderRadius: "10px",
+                      padding: "10px 12px",
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "8px",
+                    }}
+                  >
+                    {/* Round Header Bar */}
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        borderBottom: "1px solid #e2e8f0",
+                        paddingBottom: "6px",
+                      }}
+                    >
+                      <span
+                        style={{
+                          backgroundColor: "#0f172a",
+                          color: "#ffffff",
+                          padding: "2px 8px",
+                          borderRadius: "6px",
+                          fontSize: "11px",
+                          fontWeight: 800,
+                          letterSpacing: "0.02em",
+                        }}
+                      >
+                        ROUND {round.roundNumber}
+                      </span>
+
+                      {round.resting.length > 0 ? (
+                        <div
+                          style={{
+                            backgroundColor: "#fef3c7",
+                            color: "#92400e",
+                            border: "1px solid #fde68a",
+                            padding: "2px 8px",
+                            borderRadius: "12px",
+                            fontSize: "11px",
+                            fontWeight: 600,
+                          }}
+                        >
+                          💤 <strong>Resting:</strong> {round.resting.join(", ")}
+                        </div>
+                      ) : (
+                        <div
+                          style={{
+                            backgroundColor: "#ecfdf5",
+                            color: "#047857",
+                            border: "1px solid #a7f3d0",
+                            padding: "2px 8px",
+                            borderRadius: "12px",
+                            fontSize: "11px",
+                            fontWeight: 600,
+                          }}
+                        >
+                          ✨ All Playing
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Matches */}
+                    <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                      {games.map((game, gIdx) => (
+                        <div
+                          key={gIdx}
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "8px",
+                            backgroundColor: "#ffffff",
+                            border: "1px solid #f1f5f9",
+                            borderRadius: "8px",
+                            padding: "6px 10px",
+                          }}
+                        >
+                          {/* Team 1 */}
+                          <div
+                            style={{
+                              flex: 1,
+                              backgroundColor: "#eff6ff",
+                              color: "#1e40af",
+                              border: "1px solid #bfdbfe",
+                              padding: "6px 10px",
+                              borderRadius: "6px",
+                              fontSize: "12px",
+                              fontWeight: 700,
+                              textAlign: "center",
+                              textTransform: "capitalize",
+                            }}
+                          >
+                            {game.team1[0]} &amp; {game.team1[1]}
+                          </div>
+
+                          {/* VS */}
+                          <span
+                            style={{
+                              fontSize: "10px",
+                              fontWeight: 900,
+                              color: "#94a3b8",
+                              padding: "2px 6px",
+                              backgroundColor: "#ffffff",
+                              border: "1px solid #cbd5e1",
+                              borderRadius: "4px",
+                            }}
+                          >
+                            VS
+                          </span>
+
+                          {/* Team 2 */}
+                          <div
+                            style={{
+                              flex: 1,
+                              backgroundColor: "#fff1f2",
+                              color: "#9f1239",
+                              border: "1px solid #fecdd3",
+                              padding: "6px 10px",
+                              borderRadius: "6px",
+                              fontSize: "12px",
+                              fontWeight: 700,
+                              textAlign: "center",
+                              textTransform: "capitalize",
+                            }}
+                          >
+                            {game.team2[0]} &amp; {game.team2[1]}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
 
           {/* Fairness Distribution Summary */}
           {stats.length > 0 && (

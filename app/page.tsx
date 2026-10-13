@@ -14,6 +14,8 @@ export default function Home() {
     setActiveTab,
     totalCost,
     setTotalCost,
+    numCourts,
+    setNumCourts,
     players,
     addPlayer,
     updatePlayer,
@@ -38,7 +40,7 @@ export default function Home() {
 
   return (
     <main className="min-h-screen bg-slate-100 flex items-start justify-center p-4 sm:p-6 md:p-10 pt-8 sm:pt-12 pb-24">
-      <div className="bg-white p-5 sm:p-7 rounded-2xl shadow-xl shadow-slate-200/70 border border-slate-200/80 w-full max-w-lg transition-all">
+      <div className="bg-white p-5 sm:p-7 rounded-2xl shadow-xl shadow-slate-200/70 border border-slate-200/80 w-full max-w-xl transition-all">
         {/* Header */}
         <Header
           playerCount={players.length}
@@ -59,6 +61,8 @@ export default function Home() {
         {activeTab === "splitter" ? (
           <CostSplitterView
             totalCost={totalCost}
+            numCourts={numCourts}
+            onCourtsChange={setNumCourts}
             players={players}
             splitSummary={splitSummary}
             onCostChange={setTotalCost}
@@ -71,6 +75,8 @@ export default function Home() {
         ) : (
           <MatchRoundsView
             playerCount={players.length}
+            numCourts={numCourts}
+            onNumCourtsChange={setNumCourts}
             numMatches={numMatches}
             rounds={rounds}
             playerStats={playerStats}

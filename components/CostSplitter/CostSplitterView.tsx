@@ -9,6 +9,8 @@ import { Calculator } from "lucide-react";
 
 interface CostSplitterViewProps {
   totalCost: number;
+  numCourts?: number;
+  onCourtsChange?: (courts: number) => void;
   players: Player[];
   splitSummary: SplitSummary | null;
   onCostChange: (cost: number) => void;
@@ -21,6 +23,8 @@ interface CostSplitterViewProps {
 
 export const CostSplitterView: React.FC<CostSplitterViewProps> = ({
   totalCost,
+  numCourts = 1,
+  onCourtsChange,
   players,
   splitSummary,
   onCostChange,
@@ -32,7 +36,12 @@ export const CostSplitterView: React.FC<CostSplitterViewProps> = ({
 }) => {
   return (
     <div>
-      <CourtCostInput totalCost={totalCost} onChange={onCostChange} />
+      <CourtCostInput
+        totalCost={totalCost}
+        numCourts={numCourts}
+        onCourtsChange={onCourtsChange}
+        onChange={onCostChange}
+      />
 
       <PlayerList
         players={players}

@@ -19,8 +19,16 @@ export interface SplitSummary {
   results: SplitResult[];
 }
 
+export interface CourtGame {
+  courtNumber: number;
+  courtName?: string;
+  team1: [string, string];
+  team2: [string, string];
+}
+
 export interface RoundMatch {
   roundNumber: number;
+  courtGames?: CourtGame[];
   team1: [string, string];
   team2: [string, string];
   resting: string[];
@@ -35,6 +43,7 @@ export interface PlayerMatchStats {
 export interface BadmintonSessionData {
   totalCost: number;
   players: Player[];
+  numCourts?: number;
   numMatches?: number;
   splitSummary?: SplitSummary | null;
   rounds?: RoundMatch[] | null;
