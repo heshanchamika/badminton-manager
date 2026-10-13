@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import {
   Player,
   SplitSummary,
@@ -22,6 +22,15 @@ const INITIAL_PLAYERS: Player[] = [
   { id: "5", name: "manuja", hours: 2 },
 ];
 
+const INITIAL_SESSION: BadmintonSessionData = {
+  totalCost: 2000,
+  players: INITIAL_PLAYERS,
+  numMatches: 5,
+  splitSummary: null,
+  rounds: null,
+  playerStats: null,
+};
+
 export function useBadmintonManager() {
   const [activeTab, setActiveTab] = useState<TabType>("splitter");
   const [totalCost, setTotalCost] = useState<number>(2000);
@@ -34,7 +43,7 @@ export function useBadmintonManager() {
 
   const [syncStatus, setSyncStatus] = useState<SyncStatus>("loading");
   const [lastSavedTime, setLastSavedTime] = useState<string | null>(null);
-  const [hasUnsavedChanges, setHasUnsavedChanges] = useState<boolean>(false);
+  const [savedSession, setSavedSession] = useState<BadmintonSessionData | null>(null);
   const [notification, setNotification] = useState<string | null>(null);
 
   // Snapshot of last saved state to allow discarding unsaved edits
@@ -42,6 +51,60 @@ export function useBadmintonManager() {
 
   // Compute effective match count
   const effectiveNumMatches = customMatches ?? getSuggestedMatchCount(players.length);
+
+  // Determine whether current state has actually changed from saved session
+  const hasUnsavedChanges = useMemo(() => {
+    const baseline = savedSession ?? INITIAL_SESSION;
+
+    // 1. Total cost check
+    if (totalCost !== baseline.totalCost) {
+      return true;
+    }
+
+    // 2. Custom matches check
+    const currentMatches = customMatches ?? getSuggestedMatchCount(players.length);
+    const baselineMatches =
+      baseline.numMatches ?? getSuggestedMatchCount(baseline.players?.length || 5);
+    if (customMatches !== null && currentMatches !== baselineMatches) {
+      return true;
+    }
+
+    // 3. Players check
+    const baselinePlayers = baseline.players || [];
+    if (players.length !== baselinePlayers.length) {
+      return true;
+    }
+
+    for (let i = 0; i < players.length; i++) {
+      const cp = players[i];
+      const bp = baselinePlayers[i];
+      if (!bp) return true;
+      if (cp.id !== bp.id) return true;
+      if (cp.name.trim() !== bp.name.trim()) return true;
+      if (Number(cp.hours) !== Number(bp.hours)) return true;
+    }
+
+    // 4. Rounds check
+    const baselineRounds = baseline.rounds || [];
+    const currentRounds = rounds || [];
+    if (currentRounds.length !== baselineRounds.length) {
+      return true;
+    }
+
+    if (currentRounds.length > 0 && baselineRounds.length > 0) {
+      const roundsDifferent = currentRounds.some((r, idx) => {
+        const br = baselineRounds[idx];
+        if (!br) return true;
+        return (
+          r.team1.join(",") !== br.team1.join(",") ||
+          r.team2.join(",") !== br.team2.join(",")
+        );
+      });
+      if (roundsDifferent) return true;
+    }
+
+    return false;
+  }, [totalCost, players, customMatches, rounds, savedSession]);
 
   // Show transient feedback notifications
   const notify = useCallback((message: string) => {
@@ -57,12 +120,16 @@ export function useBadmintonManager() {
 
     loadSessionData()
       .then((data) => {
-        if (!isMounted || !data) {
+        if (!isMounted) return;
+        if (!data) {
+          lastSavedSnapshotRef.current = INITIAL_SESSION;
+          setSavedSession(INITIAL_SESSION);
           setSyncStatus("idle");
           return;
         }
 
         lastSavedSnapshotRef.current = data;
+        setSavedSession(data);
 
         if (Array.isArray(data.players) && data.players.length > 0) {
           setPlayers(data.players);
@@ -87,11 +154,14 @@ export function useBadmintonManager() {
         }
 
         setSyncStatus("saved");
-        setHasUnsavedChanges(false);
       })
       .catch((err) => {
         console.warn("Could not load initial session:", err);
-        if (isMounted) setSyncStatus("idle");
+        if (isMounted) {
+          lastSavedSnapshotRef.current = INITIAL_SESSION;
+          setSavedSession(INITIAL_SESSION);
+          setSyncStatus("idle");
+        }
       });
 
     // Realtime listener for remote changes
@@ -138,57 +208,45 @@ export function useBadmintonManager() {
     const res = await saveSessionData(payload);
     if (res.success) {
       lastSavedSnapshotRef.current = payload;
+      setSavedSession(payload);
       setSyncStatus("saved");
-      setHasUnsavedChanges(false);
       setLastSavedTime(new Date().toISOString());
       notify("☁️ Saved to Firebase!");
     } else {
+      lastSavedSnapshotRef.current = payload;
+      setSavedSession(payload);
       setSyncStatus("error");
       if (res.error?.toLowerCase().includes("permission")) {
         notify("Saved locally (Firestore rules permission denied)");
       } else {
         notify("Saved locally (cloud offline)");
       }
-      setHasUnsavedChanges(false);
     }
   }, [totalCost, players, effectiveNumMatches, splitSummary, rounds, playerStats, notify]);
 
   // Discard unsaved changes and revert to last saved state
   const discardChanges = useCallback(() => {
-    const snapshot = lastSavedSnapshotRef.current;
-    if (snapshot) {
-      setPlayers(snapshot.players || INITIAL_PLAYERS);
-      setTotalCost(snapshot.totalCost || 2000);
-      setCustomMatches(snapshot.numMatches ?? null);
-      setSplitSummary(snapshot.splitSummary || null);
-      setRounds(snapshot.rounds || null);
-      setPlayerStats(snapshot.playerStats || null);
-      notify("Reverted to last saved session");
-    } else {
-      setPlayers(INITIAL_PLAYERS);
-      setTotalCost(2000);
-      setCustomMatches(null);
-      setSplitSummary(null);
-      setRounds(null);
-      setPlayerStats(null);
-      notify("Reverted to initial defaults");
-    }
-    setHasUnsavedChanges(false);
+    const snapshot = savedSession || lastSavedSnapshotRef.current || INITIAL_SESSION;
+    setPlayers(snapshot.players || INITIAL_PLAYERS);
+    setTotalCost(snapshot.totalCost || 2000);
+    setCustomMatches(snapshot.numMatches ?? null);
+    setSplitSummary(snapshot.splitSummary || null);
+    setRounds(snapshot.rounds || null);
+    setPlayerStats(snapshot.playerStats || null);
     setSyncStatus("saved");
-  }, [notify]);
+    notify("Reverted to last saved session");
+  }, [savedSession, notify]);
 
   const addPlayer = (name = "", hours = 2) => {
     const newId = Date.now().toString() + Math.random().toString(36).substring(2, 5);
     const newPlayerName = name.trim() || `Player ${players.length + 1}`;
     setPlayers((prev) => [...prev, { id: newId, name: newPlayerName, hours }]);
-    setHasUnsavedChanges(true);
   };
 
   const updatePlayer = (id: string, updates: Partial<Player>) => {
     setPlayers((prev) =>
       prev.map((player) => (player.id === id ? { ...player, ...updates } : player))
     );
-    setHasUnsavedChanges(true);
   };
 
   const removePlayer = (id: string) => {
@@ -197,7 +255,6 @@ export function useBadmintonManager() {
       return;
     }
     setPlayers((prev) => prev.filter((p) => p.id !== id));
-    setHasUnsavedChanges(true);
   };
 
   const resetToDefault = () => {
@@ -207,8 +264,7 @@ export function useBadmintonManager() {
     setRounds(null);
     setPlayerStats(null);
     setCustomMatches(null);
-    setHasUnsavedChanges(true);
-    notify("Reset fields (unsaved)");
+    notify("Reset fields");
   };
 
   const handleCalculateSplit = () => {
@@ -222,8 +278,6 @@ export function useBadmintonManager() {
       return;
     }
     setSplitSummary(result);
-    // Mark unsaved changes instead of auto-saving
-    setHasUnsavedChanges(true);
   };
 
   const handleGenerateMatches = () => {
@@ -247,8 +301,6 @@ export function useBadmintonManager() {
     );
     setRounds(generatedRounds);
     setPlayerStats(stats);
-    // Mark unsaved changes instead of auto-saving
-    setHasUnsavedChanges(true);
   };
 
   const copySplitText = async () => {
@@ -279,7 +331,6 @@ export function useBadmintonManager() {
     totalCost,
     setTotalCost: (cost: number) => {
       setTotalCost(cost);
-      setHasUnsavedChanges(true);
     },
     players,
     addPlayer,
@@ -288,7 +339,6 @@ export function useBadmintonManager() {
     numMatches: effectiveNumMatches,
     setNumMatches: (val: number) => {
       setCustomMatches(val);
-      setHasUnsavedChanges(true);
     },
     splitSummary,
     rounds,

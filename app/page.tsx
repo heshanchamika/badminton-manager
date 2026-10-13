@@ -46,7 +46,6 @@ export default function Home() {
           hasUnsavedChanges={hasUnsavedChanges}
           lastSavedTime={lastSavedTime}
           onReset={resetToDefault}
-          onSaveSession={saveSession}
         />
 
         {/* Tab Switcher */}
