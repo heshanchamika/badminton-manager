@@ -43,7 +43,7 @@ export const PlayerList: React.FC<PlayerListProps> = ({
         </button>
       </div>
 
-      <div className="space-y-2 max-h-[360px] overflow-y-auto pr-1">
+      <div className="space-y-2">
         {players.map((player, index) => (
           <PlayerRow
             key={player.id}
